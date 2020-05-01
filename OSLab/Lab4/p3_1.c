@@ -8,6 +8,7 @@ int main(){
 		for (i = 1; i <= 100; i++){
 			printf("%d\n", i);
 		}
+		printf("%d\n", getppid());
 	} else {
 		wait(NULL);
 		printf("child's counting is finished!\n");
