@@ -1,4 +1,5 @@
 #include <linux/init.h>
+#include <linux/types.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -11,7 +12,7 @@
 #include <linux/fs.h>
 #include <linux/fs_struct.h>
 #include <linux/time.h>
-
+#include <linux/sched/task.h>
 #define DEVICE_NAME "getpcb"
 #define MSG_BUFFER_LEN 15
 
@@ -21,9 +22,13 @@ static int major_num;
 static char msg_buffer[MSG_BUFFER_LEN];
 static char *msg_ptr;
 
+
 static int device_open(struct inode *, struct file *);
+
 static int device_release(struct inode *, struct file *);
+
 static ssize_t device_read(struct file *, char *, size_t, loff_t *);
+
 static ssize_t device_write(struct file *, const char *, size_t, loff_t *);
 static int device_open_count = 0;
 static int pid;
@@ -43,13 +48,13 @@ unsigned int *fds;
 int i=0;
 struct path files_path;
 char *cwd;
-char *buf = kmalloc(GFP_KERNEL,100*sizeof(char)); //removed char * casting
 
 
 /* Variables used to get time and real_start_time */
-struct timespec start_time;  // Used for monotonic time
-struct timespec real_start_time;  // Used for boot based time
-
+//struct timespec start_time;  // Used for monotonic time
+//struct timespec real_start_time;  // Used for boot based time
+u64 start_time;
+u64 real_start_time;
 
 
 static struct file_operations file_ops = {
@@ -87,7 +92,8 @@ void print_state(void){
 
 /* Prints the list of open files in the process */
 void print_open_files(void){
-	
+	char *buf =(char *) kmalloc(GFP_KERNEL,100*sizeof(char)); 
+
 	current_files = t->files; /* gets open files */
 	files_table = files_fdtable(current_files);
 	printk(KERN_ALERT "Open files:");
@@ -104,12 +110,13 @@ void print_open_files(void){
 /* Prints start_time and ral_start_time */
 void print_time(void){
 	
-	start_time = t->start_time;
-	real_start_time = t->real_start_time;
+	/*start_time = t->start_time;
+	real_start_time = t->real_start_time; */
 	
 	/* https://stackoverflow.com/questions/8304259/formatting-struct-timespec */
+/*
 	printk(KERN_INFO "Start time: %lld.%.9ld", (long long)start_time.tv_sec, start_time.tv_nsec);
-	printk(KERN_INFO "Real Start time: %lld.%.9ld", (long long)real_start_time.tv_sec, real_start_time.tv_nsec);
+	printk(KERN_INFO "Real Start time: %lld.%.9ld", (long long)real_start_time.tv_sec, real_start_time.tv_nsec); */
 }
 
 
@@ -195,6 +202,37 @@ static ssize_t device_write(struct file *file, const char __user * buffer,
 
 }
 
+static int device_open(struct inode *inode, struct file *file) {
+
+
+ if (device_open_count) {
+
+ return -EBUSY;
+
+ }
+
+ device_open_count++;
+
+ try_module_get(THIS_MODULE);
+
+ return 0;
+
+}
+
+
+
+
+
+
+static int device_release(struct inode *inode, struct file *file) {
+
+ device_open_count--;
+
+ module_put(THIS_MODULE);
+
+ return 0;
+
+}
 
 static int __init my_module_init(void) {
 
