@@ -14,7 +14,7 @@
 #include <linux/time.h>
 #include <linux/sched/task.h>
 #define DEVICE_NAME "getpcb"
-#define MSG_BUFFER_LEN 100
+#define MSG_BUFFER_LEN 500
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("MFA");
@@ -65,31 +65,6 @@ static struct file_operations file_ops = {
 	.open = device_open,
 	.release = device_release
 };
-
-
-
-
-/* Prints state of the process */
-void print_state(void){
-	printk(KERN_INFO "State of the process %d: %ld", t->pid, t->state);
-}
-
-
-/* Prints the list of open files in the process */
-void print_open_files(void){
-	char *buf =(char *) kmalloc(GFP_KERNEL,100*sizeof(char)); 
-	printk(KERN_INFO "in open_files\n");
-	current_files = t->files; /* gets open files */
-	files_table = files_fdtable(current_files);
-	printk(KERN_ALERT "Open files:");
- 	
-	while(files_table->fd[i] != NULL) { 
- 		files_path = files_table->fd[i]->f_path;
- 		cwd = d_path(&files_path,buf,100*sizeof(char));
- 		printk(KERN_ALERT "Open file with fd %d  %s", i, cwd);
- 		i++;
- 	}
-}
 int digit_num(int n){
 
 	if (n < 10) return 1;
@@ -119,18 +94,84 @@ char* toStr(int value){
 	return result;
 }
 
+int a2i(char s[]) {
+	int counter = 0;
+	int num = 0;
+	while (s[counter] > 47 && s[counter] <58) {
+		num = ( (s[counter]) - 48) + num * 10;
+		counter++; 
+	}
+	
+	return num;
+}
+
+
+
+void concat(char *a, char *b, char *result){ // merges a with b and write the merged string in result
+    int i = 0;
+    
+    while (*a != '\0'){
+        *result = *a; 
+        result++;
+        a++;
+    }
+    
+    *result = ' ';
+    result++;
+    
+    while (*b != '\0'){
+        *result = *b;
+        result++;
+        b++;
+    }
+    
+    *result = '\0';
+   
+}
+
+
+/* Prints state of the process */
+char * print_state(void){
+	printk(KERN_INFO "State of the process %d: %ld", t->pid, t->state);
+	char * result = (char*) kmalloc(4, sizeof(char));
+	printk(KERN_INFO "%s", toStr(t -> pid));
+	concat(toStr(t ->pid), toStr(t->state), result);
+	
+	return result;
+}
+
+
+/* Prints the list of open files in the process */
+void print_open_files(void){
+	char *buf =(char *) kmalloc(GFP_KERNEL,100*sizeof(char)); 
+	printk(KERN_INFO "in open_files\n");
+	current_files = t->files; /* gets open files */
+	files_table = files_fdtable(current_files);
+	printk(KERN_ALERT "Open files:");
+ 	
+	while(files_table->fd[i] != NULL) { 
+ 		files_path = files_table->fd[i]->f_path;
+ 		cwd = d_path(&files_path,buf,100*sizeof(char));
+ 		printk(KERN_ALERT "Open file with fd %d  %s", i, cwd);
+ 		i++;
+ 	}
+}
+
 
 
 /* Prints start_time and ral_start_time */
-void print_time(void){
+char* print_time(void){
 	
-	/*start_time = t->start_time;
-	real_start_time = t->real_start_time; */
+	start_time = t->start_time;
+	real_start_time = t->real_start_time; 
 	
 	/* https://stackoverflow.com/questions/8304259/formatting-struct-timespec */
-/*
-	printk(KERN_INFO "Start time: %lld.%.9ld", (long long)start_time.tv_sec, start_time.tv_nsec);
-	printk(KERN_INFO "Real Start time: %lld.%.9ld", (long long)real_start_time.tv_sec, real_start_time.tv_nsec); */
+
+	printk(KERN_INFO "Start time: %lld.%.9ld", (long long)start_time);
+	printk(KERN_INFO "Real Start time: %lld.%.9ld", (long long)real_start_time); 
+char * result = (char*) kmalloc(30, sizeof(char));
+concat(toStr(start_time), toStr(real_start_time), result);
+return result;
 }
 
 
@@ -139,14 +180,17 @@ void print_time(void){
 	https://stackoverflow.com/questions/61530040/what-are-nivcsw-and-nvcsw-fields-in-task-struct
 
 */
-void print_csw(void){
+char* print_csw(void){
 	printk(KERN_INFO "Number of Voluntary context switches: %ld", t->nvcsw);
 	printk(KERN_INFO "Number of InVoluntary context switches: %ld", t->nivcsw);
+char * result = (char*) kmalloc(30, sizeof(char));
+concat(toStr(t->nvcsw), toStr(t->nivcsw), result);
+return result;
 }
 
 
 
-void getpcb(int pid){
+char * getpcb(int pid){
 	/* Access the task_struct using the code available at:
 		https://stackoverflow.com/questions/56531880/how-does-the-kernel-use-task-struct
 	*/
@@ -156,12 +200,6 @@ void getpcb(int pid){
 	// Trying to access the variables of the p_id
     struct pid * pid_struct = find_get_pid(pid);
     t = pid_task(pid_struct, PIDTYPE_PID);
-
-
-
-
-
-
 
 
 	//read_lock(&tasklist_lock);
@@ -174,25 +212,27 @@ void getpcb(int pid){
 
 	if (t == NULL) {
     		printk(KERN_INFO "Process %d not found!", pid);
+		return "process id not found!";
 	} else {
-		printk(KERN_INFO "here");
-		print_state();       /* prints the state */
-		print_open_files();  /* prints the open files */
-		print_time();        /* prints start_time and real_start_time */
-		print_csw();          /* prints context switch related data */
-	}
+		char * result = (char*) kmalloc(100, sizeof(char));
+		printk(KERN_INFO "process id found\n");
+		char* state = print_state();       /* prints the state */
+		printk(KERN_INFO "state is %s\n", state);
+		//print_open_files();  /* prints the open files */
+		char * time = print_time();        /* prints start_time and real_start_time */
+		printk(KERN_INFO "time is %s\n", time);
 
-	return 0; 
-}
-int a2i(char s[]) {
-	int counter = 0;
-	int num = 0;
-	while (s[counter] > 47 && s[counter] <58) {
-		num = ( (s[counter]) - 48) + num * 10;
-		counter++; 
-	}
-	
-	return num;
+		concat(state, time, result);
+		printk(KERN_INFO "state and time are %s\n", result);
+		
+		char * csw = print_csw();          /* prints context switch related data */
+		printk(KERN_INFO "csw is %s\n", csw);
+		concat(result, csw, result);
+		printk(KERN_INFO "all are %s\n", result);
+		return result;
+	} 
+
+	 
 }
 
 
@@ -210,9 +250,10 @@ static ssize_t device_read(struct file *flip, char *buffer, size_t len, loff_t *
 
     pid = a2i(msg_ptr);
     printk(KERN_INFO "pid is %d",pid);
-    getpcb(pid);
+	
+    char * str = getpcb(pid);
 
-    //msg_ptr = str;
+    msg_ptr = str;
     while (len && *msg_ptr) {
         put_user(*(msg_ptr++), buffer++);
         len--;
