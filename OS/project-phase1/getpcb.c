@@ -10,7 +10,7 @@
 #include <linux/fdtable.h>
 #include <linux/fs.h>
 #include <linux/fs_struct.h>
-#include <time.h>
+#include <linux/time.h>
 
 #define DEVICE_NAME "getpcb"
 #define MSG_BUFFER_LEN 15
@@ -43,10 +43,10 @@ unsigned int *fds;
 int i=0;
 struct path files_path;
 char *cwd;
-char *buf = (char *)kmalloc(GFP_KERNEL,100*sizeof(char));
+char *buf = kmalloc(GFP_KERNEL,100*sizeof(char)); //removed char * casting
 
 
-/* Variables used to get start_time and real_start_time */
+/* Variables used to get time and real_start_time */
 struct timespec start_time;  // Used for monotonic time
 struct timespec real_start_time;  // Used for boot based time
 
@@ -80,13 +80,13 @@ int a2i(char* s) {
 
 
 /* Prints state of the process */
-void print_state(){
+void print_state(void){
 	printk(KERN_INFO "State of the process %d: %ld", t->pid, t->state);
 }
 
 
 /* Prints the list of open files in the process */
-void print_open_files(){
+void print_open_files(void){
 	
 	current_files = t->files; /* gets open files */
 	files_table = files_fdtable(current_files);
@@ -102,14 +102,14 @@ void print_open_files(){
 
 
 /* Prints start_time and ral_start_time */
-void print_time(){
+void print_time(void){
 	
 	start_time = t->start_time;
 	real_start_time = t->real_start_time;
 	
 	/* https://stackoverflow.com/questions/8304259/formatting-struct-timespec */
-	printk(KERN_INFO "Start time: %lld.%.9ld", (long long)start_time.tv_sec, start_time.tv_nsec)
-	printk(KERN_INFO "Real Start time: %lld.%.9ld", (long long)real_start_time.tv_sec, real_start_time.tv_nsec)
+	printk(KERN_INFO "Start time: %lld.%.9ld", (long long)start_time.tv_sec, start_time.tv_nsec);
+	printk(KERN_INFO "Real Start time: %lld.%.9ld", (long long)real_start_time.tv_sec, real_start_time.tv_nsec);
 }
 
 
@@ -118,7 +118,7 @@ void print_time(){
 	https://stackoverflow.com/questions/61530040/what-are-nivcsw-and-nvcsw-fields-in-task-struct
 
 */
-void print_csw(){
+void print_csw(void){
 	printk(KERN_INFO "Number of Voluntary context switches: %ld", t->nvcsw);
 	printk(KERN_INFO "Number of InVoluntary context switches: %ld", t->nivcsw);
 }
@@ -143,7 +143,7 @@ void getpcb(int pid){
 		print_state();       /* prints the state */
 		print_open_files();  /* prints the open files */
 		print_time();        /* prints start_time and real_start_time */
-		print_cs();          /* prints context switch related data */
+		print_csw();          /* prints context switch related data */
 	}
 
 	return 0;
@@ -162,10 +162,10 @@ static ssize_t device_read(struct file *flip, char *buffer, size_t len, loff_t *
     }
 
 
-    pid = atoi(msg_ptr);
-	get_pcb(pid);
+    pid = a2i(msg_ptr);
+    getpcb(pid);
 
-    msg_ptr = str;
+    //msg_ptr = str;
     while (len && *msg_ptr) {
         put_user(*(msg_ptr++), buffer++);
         len--;
