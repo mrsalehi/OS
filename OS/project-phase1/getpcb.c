@@ -14,9 +14,11 @@
 #include <linux/time.h>
 #include <linux/sched/task.h>
 #define DEVICE_NAME "getpcb"
-#define MSG_BUFFER_LEN 15
+#define MSG_BUFFER_LEN 100
 
 MODULE_LICENSE("GPL");
+MODULE_AUTHOR("MFA");
+MODULE_DESCRIPTION("GETS PCB");
 
 static int major_num;
 static char msg_buffer[MSG_BUFFER_LEN];
@@ -65,23 +67,6 @@ static struct file_operations file_ops = {
 };
 
 
-/* Converts a string to integer */
-int a2i(char* s) {
-	
-	int sign = 1;
-	if(*s == '-'){
-		sign = -1;
-		s ++;
-	}
-
-	int num = 0;
-	while (*s) {
-		num = ( (*s) - '0') + num * 10;
-		s++; 
-	}
-
-	return num * sign;
-}
 
 
 /* Prints state of the process */
@@ -93,7 +78,7 @@ void print_state(void){
 /* Prints the list of open files in the process */
 void print_open_files(void){
 	char *buf =(char *) kmalloc(GFP_KERNEL,100*sizeof(char)); 
-
+	printk(KERN_INFO "in open_files\n");
 	current_files = t->files; /* gets open files */
 	files_table = files_fdtable(current_files);
 	printk(KERN_ALERT "Open files:");
@@ -105,6 +90,35 @@ void print_open_files(void){
  		i++;
  	}
 }
+int digit_num(int n){
+
+	if (n < 10) return 1;
+	if (n < 100) return 2;
+	if (n < 1000) return 3;
+	if (n < 10000) return 4;
+	if (n < 100000) return 5;
+	if (n < 1000000) return 6;
+	if (n < 10000000) return 7;
+	if (n < 100000000) return 8;
+	if (n < 1000000000) return 9;
+	
+	return 10;
+}
+char* toStr(int value){
+	int digits = digit_num(value);
+	char* result = (char*) kmalloc(digits + 1 , sizeof(char));
+	int temp;
+	for (temp = value; temp > 0 ;temp/=10, result++) {
+		*result = '\0';
+
+	}
+	*result = '\0';
+	for (temp = value; temp > 0 ; temp /= 10) {
+		*--result = temp % 10 + '0';
+	}
+	return result;
+}
+
 
 
 /* Prints start_time and ral_start_time */
@@ -136,30 +150,55 @@ void getpcb(int pid){
 	/* Access the task_struct using the code available at:
 		https://stackoverflow.com/questions/56531880/how-does-the-kernel-use-task-struct
 	*/
-	read_lock(&tasklist_lock);
-	t = find_task_by_vpid(pid);
+ 
+
+
+	// Trying to access the variables of the p_id
+    struct pid * pid_struct = find_get_pid(pid);
+    t = pid_task(pid_struct, PIDTYPE_PID);
+
+
+
+
+
+
+
+
+	//read_lock(&tasklist_lock);
+	//t = find_task_by_vpid(pid);
 
 	if (t)
 		get_task_struct(t);
 
-	read_unlock(&tasklist_lock);
+	//read_unlock(&tasklist_lock);
 
 	if (t == NULL) {
     		printk(KERN_INFO "Process %d not found!", pid);
 	} else {
+		printk(KERN_INFO "here");
 		print_state();       /* prints the state */
 		print_open_files();  /* prints the open files */
 		print_time();        /* prints start_time and real_start_time */
 		print_csw();          /* prints context switch related data */
 	}
 
-	return 0;
+	return 0; 
+}
+int a2i(char s[]) {
+	int counter = 0;
+	int num = 0;
+	while (s[counter] > 47 && s[counter] <58) {
+		num = ( (s[counter]) - 48) + num * 10;
+		counter++; 
+	}
+	
+	return num;
 }
 
 
 
-
 static ssize_t device_read(struct file *flip, char *buffer, size_t len, loff_t *offset) {
+	
 
     int bytes_read = 0;
 	int pid;
@@ -170,6 +209,7 @@ static ssize_t device_read(struct file *flip, char *buffer, size_t len, loff_t *
 
 
     pid = a2i(msg_ptr);
+    printk(KERN_INFO "pid is %d",pid);
     getpcb(pid);
 
     //msg_ptr = str;
