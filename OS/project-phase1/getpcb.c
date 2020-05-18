@@ -14,7 +14,7 @@
 #include <linux/time.h>
 #include <linux/sched/task.h>
 #define DEVICE_NAME "getpcb"
-#define MSG_BUFFER_LEN 500
+#define MSG_BUFFER_LEN 5000
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("MFA");
@@ -116,7 +116,7 @@ void concat(char *a, char *b, char *result){ // merges a with b and write the me
         a++;
     }
     
-    *result = ' ';
+    *result = '\n';
     result++;
     
     while (*b != '\0'){
@@ -142,19 +142,28 @@ char * print_state(void){
 
 
 /* Prints the list of open files in the process */
-void print_open_files(void){
-	char *buf =(char *) kmalloc(GFP_KERNEL,100*sizeof(char)); 
+char* print_open_files(void){
+	char *buf = (char *) kmalloc(100, sizeof(char)); 
+	char *result = (char *) kmalloc(4000, sizeof(char));
+	*result = '\0';
+
 	printk(KERN_INFO "in open_files\n");
 	current_files = t->files; /* gets open files */
 	files_table = files_fdtable(current_files);
-	printk(KERN_ALERT "Open files:");
+	printk(KERN_INFO "Open files:");
  	
+	i = 0;
+
 	while(files_table->fd[i] != NULL) { 
  		files_path = files_table->fd[i]->f_path;
- 		cwd = d_path(&files_path,buf,100*sizeof(char));
- 		printk(KERN_ALERT "Open file with fd %d  %s", i, cwd);
+ 		//cwd = d_path(&files_path,buf,100*sizeof(char));
+		cwd = dentry_path_raw(files_path.dentry, buf, 100 * sizeof(char));
+		concat(result, cwd, result);
+		printk(KERN_INFO "Open file with fd %d  %s", i, cwd);
  		i++;
  	}
+
+	return result;
 }
 
 
@@ -169,9 +178,9 @@ char* print_time(void){
 
 	printk(KERN_INFO "Start time: %lld.%.9ld", (long long)start_time);
 	printk(KERN_INFO "Real Start time: %lld.%.9ld", (long long)real_start_time); 
-char * result = (char*) kmalloc(30, sizeof(char));
-concat(toStr(start_time), toStr(real_start_time), result);
-return result;
+	char * result = (char*) kmalloc(30, sizeof(char));
+	concat(toStr(start_time), toStr(real_start_time), result);
+	return result;
 }
 
 
@@ -183,9 +192,9 @@ return result;
 char* print_csw(void){
 	printk(KERN_INFO "Number of Voluntary context switches: %ld", t->nvcsw);
 	printk(KERN_INFO "Number of InVoluntary context switches: %ld", t->nivcsw);
-char * result = (char*) kmalloc(30, sizeof(char));
-concat(toStr(t->nvcsw), toStr(t->nivcsw), result);
-return result;
+	char * result = (char*) kmalloc(30, sizeof(char));
+	concat(toStr(t->nvcsw), toStr(t->nivcsw), result);
+	return result;
 }
 
 
@@ -214,15 +223,18 @@ char * getpcb(int pid){
     		printk(KERN_INFO "Process %d not found!", pid);
 		return "process id not found!";
 	} else {
-		char * result = (char*) kmalloc(100, sizeof(char));
+		char * result = (char*) kmalloc(5000, sizeof(char));
 		printk(KERN_INFO "process id found\n");
 		char* state = print_state();       /* prints the state */
 		printk(KERN_INFO "state is %s\n", state);
-		//print_open_files();  /* prints the open files */
+		
+		char *open_files = print_open_files();  /* prints the open files */		concat(state, open_files, result);
+		printk(KERN_INFO "Open files are:\n%s", open_files);
+		
 		char * time = print_time();        /* prints start_time and real_start_time */
 		printk(KERN_INFO "time is %s\n", time);
 
-		concat(state, time, result);
+		concat(result, time, result);
 		printk(KERN_INFO "state and time are %s\n", result);
 		
 		char * csw = print_csw();          /* prints context switch related data */
