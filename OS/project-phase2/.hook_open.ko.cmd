@@ -1,0 +1,1 @@
+cmd_/home/aida/Desktop/OS/OS/project-phase2/hook_open.ko := ld -r -m elf_i386 -T ./scripts/module-common.lds --build-id  -o /home/aida/Desktop/OS/OS/project-phase2/hook_open.ko /home/aida/Desktop/OS/OS/project-phase2/hook_open.o /home/aida/Desktop/OS/OS/project-phase2/hook_open.mod.o ;  true
