@@ -13,12 +13,18 @@
 
 
 
+MODULE_LICENSE("GPL");
+
+static asmlinkage long (*getuid_call)(void);
 
 static asmlinkage long (*old_open) (const char __user *filename, int flags, umode_t mode);
 
 static asmlinkage long custom_open(const char __user *filename, int flags, umode_t mode)
 {
-      printk(KERN_INFO "Custom open invoked");
+	int uid = getuid_call();
+      printk(KERN_INFO "Custom open invoked %d\n", uid);
+
+
 
       return old_open(filename, flags, mode);
 }
@@ -49,10 +55,12 @@ find_syscall_table(void){
  printk("Not found\n");  
  return NULL; 
 } 
-int __init chdir_init(void){     
+int __init init(void){     
  unsigned int l;     
  pte_t *pte;     
- syscall_table = (void **) find_syscall_table();  //TODO can change with kallsyms_lookup_name   
+// syscall_table = (void **) find_syscall_table();  
+syscall_table = kallsyms_lookup_name("sys_call_table");
+//TODO can change with kallsyms_lookup_name   
  if(syscall_table == NULL)   {       
  printk(KERN_ERR"Syscall table is not found\n");         
  return -1;  
@@ -63,12 +71,12 @@ int __init chdir_init(void){
     old_open =  syscall_table[__NR_open];
     syscall_table[__NR_open] = custom_open;
     printk("Patched!\nOLD :%p\nIN-TABLE:%p\nNEW:%p\n",
-                old_open, syscall_table[__NR_open],custom_open);
+                old_open, syscall_table[__NR_open],custom_open); 
+   getuid_call = syscall_table[__NR_getuid];
     return 0;
 }
  
-void __exit
-chdir_cleanup(void){
+void __exit exit(void){
     unsigned int l;
     pte_t *pte;
     syscall_table[__NR_open] = old_open;
@@ -78,7 +86,37 @@ chdir_cleanup(void){
     return;
 }
  
-module_init(chdir_init);
-module_exit(chdir_cleanup);
-MODULE_LICENSE("GPL");
+module_init(init);
+module_exit(exit);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
