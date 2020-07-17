@@ -11,11 +11,11 @@
 #include <linux/highmem.h>
 #include <linux/sched.h>
 #include <linux/string.h>
-
+#include <linux/moduleparam.h>
 #define DEVICE_NAME "open changer"
 #define MSG_BUFFER_LEN 5000
 #define MAX_USER 100
-#define MAX_FILE 10000
+#define MAX_FILE 100
 
 
 #define O_RDONLY        00000000
@@ -31,6 +31,15 @@ static int user_sls[MAX_USER];
 static char* file_names[MAX_FILE];
 static int file_sls[MAX_FILE];
 
+
+module_param_array(user_ids, int, NULL, 0000);
+MODULE_PARM_DESC(user_ids, "array of user ids");
+module_param_array(user_sls, int, NULL, 0000);
+MODULE_PARM_DESC(user_sls, "array of user sls");
+module_param_array(file_sls, int, NULL, 0000);
+MODULE_PARM_DESC(file_sls, "array of files sls");
+module_param_array(file_names, charp, NULL, 0000);
+MODULE_PARM_DESC(file_names, "array of file names");
 
 static int major_num;
 static char msg_buffer[MSG_BUFFER_LEN];
@@ -71,24 +80,36 @@ static asmlinkage long custom_open(const char __user *filename, int flags, umode
 	
 	int user_sl = 0;
 	int file_sl = 0;
-	printk(KERN_INFO "SL open invoked\n");
+	printk(KERN_INFO "SL open invoked user: %d file = %s request = %d\n", uid,filename,request_mode);
 	
 	int j = 0;
-	for(j = 0 ; j < MAX_USER; j++) {
+	 for(j = 0 ; j < MAX_USER; j++) {
 		if (uid == user_ids[j]) {
 			user_sl = user_sls[j];
+			
 			break;
 		}
 
 	}
-	for(j = 0; j < FILE_MAX; j++) {
+	
+	for(j = 0; j < MAX_FILE; j++) {
+	
+	if (file_names[j] == NULL){
+		break;
+		
+	}
+	//printk(KERN_INFO "file name[j]:%s \ncalled file:%s \n", file_names[j], filename);
+	
+	
 	if (strcmp(file_names[j], filename) == 0) {
-
+		//printk(KERN_INFO "compare%d\n", strcmp(file_names[j], filename));
 		file_sl = file_sls[j];
+		//printk(KERN_INFO "found file %s, sls is %d, filename= %s\n", file_names[j], file_sls[j], filename);
 		break;
 	}
 	
 	}
+
 
 		int allowed = 0;
 		if (request_mode == 0) { //read
@@ -99,21 +120,29 @@ static asmlinkage long custom_open(const char __user *filename, int flags, umode
 		}
 		else if (request_mode == 1) { //write
 		if (user_sl <= file_sl) {
-			allowed = 1;		
+			allowed    = 1;		
 		}		
 		}
 
-		else if (request_model == 2) { //read_write
+
+
+		else if (request_mode == 2) { //read_write
 		if (user_sl == file_sl) {
 			allowed = 1;		
 		}
 		}
+
+
+
+
+		
 		
 		if (allowed == 1) {
 		return old_open(filename, flags, mode);
 		}
 		else {//TODO what return??
-
+			printk(KERN_INFO "User not allowed\n");
+			return 0;
 		}
 
 	
@@ -186,6 +215,7 @@ void concat(char *a, char *b, char *result){ // merges a with b and write the me
     *result = '\0';
    
 }
+
 static ssize_t device_read(struct file *flip, char *buffer, size_t len, loff_t *offset) {
 	
 
@@ -297,6 +327,7 @@ syscall_table = kallsyms_lookup_name("sys_call_table");
     printk("Patched!\nOLD :%p\nIN-TABLE:%p\nNEW:%p\n",
                 old_open, syscall_table[__NR_open],custom_open); 
    getuid_call = syscall_table[__NR_getuid];
+   
     return 0;
 }
 }
@@ -308,6 +339,7 @@ void __exit my_exit(void){
     syscall_table[__NR_open] = old_open;
     pte = lookup_address((long unsigned int)syscall_table,&l);
     pte->pte &= ~_PAGE_RW;
+
     
     printk("Exit\n");
     return;
