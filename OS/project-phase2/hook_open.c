@@ -12,6 +12,10 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/moduleparam.h>
+#include <linux/time.h>
+#include <linux/rtc.h>
+#include <linux/slab.h>
+
 #define DEVICE_NAME "open changer"
 #define MSG_BUFFER_LEN 5000
 #define MAX_USER 100
@@ -44,7 +48,7 @@ MODULE_PARM_DESC(file_names, "array of file names");
 static int major_num;
 static char msg_buffer[MSG_BUFFER_LEN];
 static char *msg_ptr;
-
+char * file_text;
 
 
 MODULE_LICENSE("GPL");
@@ -67,20 +71,112 @@ int i=0;
 struct path files_path;
 char *cwd;
 
+
+char buffer[40];
+struct timeval time;
+unsigned long local_time;
+struct rtc_time tm;
+
+void concat(char *a, char *b, char *result){ // merges a with b and write the merged string in result
+    int i = 0;
+    
+    while (*a != '\0'){
+        *result = *a; 
+        result++;
+        a++;
+    }
+    
+    *result = '\n';
+    result++;
+    
+    while (*b != '\0'){
+        *result = *b;
+        result++;
+        b++;
+    }
+    
+    *result = '\0';
+   
+}
+
+
+int digit_num(int n){
+
+	if (n < 10) return 1;
+	if (n < 100) return 2;
+	if (n < 1000) return 3;
+	if (n < 10000) return 4;
+	if (n < 100000) return 5;
+	if (n < 1000000) return 6;
+	if (n < 10000000) return 7;
+	if (n < 100000000) return 8;
+	if (n < 1000000000) return 9;
+	
+	return 10;
+}
+
+char* toStr(int value){
+	int digits = digit_num(value);
+	char* result = (char*) kmalloc(digits + 1 , sizeof(char));
+	int temp;
+	if (value == 0) {	
+		char * zero = "0";
+		concat("", zero, result);
+		//printk(KERN_INFO "str: %s\n", result);
+		
+	
+	}
+	for (temp = value; temp > 0 ;temp/=10, result++) {
+		*result = '\0';
+
+	}
+	*result = '\0';
+	for (temp = value; temp > 0 ; temp /= 10) {
+		*--result = temp % 10 + '0';
+	}
+	return result;
+}
+
+
+int a2i(char s[]) {
+	int counter = 0;
+	int num = 0;
+	while (s[counter] > 47 && s[counter] <58) {
+		num = ( (s[counter]) - 48) + num * 10;
+		counter++; 
+	}
+	
+	return num;
+}
+
+
+
+
 static asmlinkage long (*getuid_call)(void);
 
 static asmlinkage long (*old_open) (const char __user *filename, int flags, umode_t mode);
 
 static asmlinkage long custom_open(const char __user *filename, int flags, umode_t mode)
-{
+{	
+
+	
+	
 	int uid = getuid_call();
 	char* file_name = filename;
+	int known_file = 0;
 	int request_mode = O_ACCMODE & flags; //0 : read 1 : write 2 : readwrite
 	//int accmod = ACC_MODE(flags);
 	
 	int user_sl = 0;
 	int file_sl = 0;
-	printk(KERN_INFO "SL open invoked user: %d file = %s request = %d\n", uid,filename,request_mode);
+	//printk(KERN_INFO "SL open invoked user: %d file = %s request = %d\n", uid,filename,request_mode);
+
+
+	char result[200];
+	concat("", toStr(uid), result);
+	
+	concat(result, "	", result);	
+ 
 	
 	int j = 0;
 	 for(j = 0 ; j < MAX_USER; j++) {
@@ -91,6 +187,14 @@ static asmlinkage long custom_open(const char __user *filename, int flags, umode
 		}
 
 	}
+	if (user_sl == 0) 	
+		concat(result, "0", result);
+	else
+		concat(result, toStr(user_sl), result);
+	concat(result, "	", result);
+	concat(result, filename, result);
+	concat(result,	"	", result);
+	
 	
 	for(j = 0; j < MAX_FILE; j++) {
 	
@@ -98,27 +202,40 @@ static asmlinkage long custom_open(const char __user *filename, int flags, umode
 		break;
 		
 	}
-	//printk(KERN_INFO "file name[j]:%s \ncalled file:%s \n", file_names[j], filename);
+
 	
 	
 	if (strcmp(file_names[j], filename) == 0) {
-		//printk(KERN_INFO "compare%d\n", strcmp(file_names[j], filename));
+
 		file_sl = file_sls[j];
-		//printk(KERN_INFO "found file %s, sls is %d, filename= %s\n", file_names[j], file_sls[j], filename);
+		known_file = 1;
+
 		break;
 	}
 	
 	}
+	if (file_sl == 0)
+		concat(result, "0", result);
+	else
+		concat(result, toStr(file_sl), result);
+	concat(result, "	", result);
+	
+	
 
 
 		int allowed = 0;
 		if (request_mode == 0) { //read
+			char* mode_s = "read_only";
+			concat(result, mode_s, result);
 		if (user_sl >= file_sl) {
+	
 			allowed = 1;
 		}
 			
 		}
 		else if (request_mode == 1) { //write
+			char * mode_s = "write_only";
+			concat(result, mode_s, result);
 		if (user_sl <= file_sl) {
 			allowed    = 1;		
 		}		
@@ -127,10 +244,32 @@ static asmlinkage long custom_open(const char __user *filename, int flags, umode
 
 
 		else if (request_mode == 2) { //read_write
+			char * mode_s = "read_write";
+			concat(result, mode_s, result);
 		if (user_sl == file_sl) {
 			allowed = 1;		
 		}
 		}
+		
+		concat(result, "	", result); 
+		printk(KERN_INFO "%s\n", result);
+		
+		//gettimeofday(&time, NULL);
+		do_gettimeofday(&time);
+		local_time = (u32)(time.tv_sec - (sys_tz.tz_minuteswest * 60));
+		rtc_time_to_tm(local_time, &tm);
+		
+		concat(result, toStr(tm.tm_hour), result);	
+		concat(result, ":", result);
+		concat(result, toStr(tm.tm_min), result);
+		concat(result, ":", result);	
+		concat(result, toStr(tm.tm_sec), result);	
+		concat(result, "\n", result);
+		if (known_file)
+			printk(KERN_INFO "%s\n", result);
+		
+		
+		
 
 
 
@@ -165,56 +304,6 @@ static struct file_operations file_ops = {
 
 //device file functions
 
-int digit_num(int n){
-
-	if (n < 10) return 1;
-	if (n < 100) return 2;
-	if (n < 1000) return 3;
-	if (n < 10000) return 4;
-	if (n < 100000) return 5;
-	if (n < 1000000) return 6;
-	if (n < 10000000) return 7;
-	if (n < 100000000) return 8;
-	if (n < 1000000000) return 9;
-	
-	return 10;
-}
-
-
-int a2i(char s[]) {
-	int counter = 0;
-	int num = 0;
-	while (s[counter] > 47 && s[counter] <58) {
-		num = ( (s[counter]) - 48) + num * 10;
-		counter++; 
-	}
-	
-	return num;
-}
-
-
-
-void concat(char *a, char *b, char *result){ // merges a with b and write the merged string in result
-    int i = 0;
-    
-    while (*a != '\0'){
-        *result = *a; 
-        result++;
-        a++;
-    }
-    
-    *result = '\n';
-    result++;
-    
-    while (*b != '\0'){
-        *result = *b;
-        result++;
-        b++;
-    }
-    
-    *result = '\0';
-   
-}
 
 static ssize_t device_read(struct file *flip, char *buffer, size_t len, loff_t *offset) {
 	
@@ -296,6 +385,7 @@ static int device_release(struct inode *inode, struct file *file) {
 }
 
 int __init my_init(void){  
+	
 
    //register device file
 	major_num = register_chrdev(0, "my_module", &file_ops);
